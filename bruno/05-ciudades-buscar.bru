@@ -1,0 +1,11 @@
+meta {
+  name: 05 - Buscar Ciudades (GET /api/ciudades/buscar)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/ciudades/buscar?q=Bogota&limite=5
+  body: none
+  auth: none
+}

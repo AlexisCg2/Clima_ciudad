@@ -1,0 +1,18 @@
+rules_version = '2';
+
+/**
+ * Reglas de seguridad de Firestore para 09-clima-por-ciudad
+ *
+ * REGLA DE ORO ARQUITECTÓNICA (Sección 2 y 9.3 de 09-clima-por-ciudad.md):
+ * El navegador NUNCA interactúa directamente con Firestore.
+ * Toda lectura y escritura se realiza estrictamente en el servidor a través
+ * de los Route Handlers de Next.js mediante Firebase Admin SDK.
+ * Por lo tanto, el acceso directo desde clientes web está completamente denegado.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

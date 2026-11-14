@@ -1,0 +1,25 @@
+meta {
+  name: 07 - Agregar Favorita (POST /api/ciudades)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/ciudades
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: {{baseUrl}}
+}
+
+body:json {
+  {
+    "nombre": "Medellín",
+    "pais": "Colombia",
+    "lat": 6.25,
+    "lng": -75.56
+  }
+}

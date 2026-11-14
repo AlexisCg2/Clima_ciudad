@@ -1,0 +1,47 @@
+{
+  "name": "09-clima-por-ciudad-sandbox",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceFolder": "/workspace",
+
+  // Montaje principal del workspace editable (código fuente)
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+
+  // Montajes de aislamiento y contención estructural
+  "mounts": [
+    // Volumen nombrado para node_modules (hereda permisos node:node del Dockerfile)
+    "source=clima_node_modules,target=/workspace/node_modules,type=volume",
+
+    // HARD BARRIERS: Archivos de gobernanza montados como READ-ONLY en el VFS del Kernel Linux
+    "source=${localWorkspaceFolder}/AGENTS.md,target=/workspace/AGENTS.md,type=bind,readonly",
+    "source=${localWorkspaceFolder}/IA.md,target=/workspace/IA.md,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.gitignore,target=/workspace/.gitignore,type=bind,readonly",
+    "source=${localWorkspaceFolder}/ia,target=/workspace/ia,type=bind,readonly"
+  ],
+
+  // Usuario en ejecución sin privilegios
+  "remoteUser": "node",
+  "containerUser": "node",
+
+  // Restricciones de seguridad a nivel de Kernel
+  "runArgs": [
+    // Red aislada exclusivamente para el runtime del contenedor en desarrollo y pruebas (loopback disponible, WAN bloqueada).
+    // NOTA: Esto rige la ejecución del contenedor; no restringe el proceso docker build previo en el host.
+    "--network=none",
+
+    // Bloqueo de escalada de privilegios mediante binarios setuid/setgid
+    "--security-opt=no-new-privileges:true",
+
+    // Eliminación de todas las capacidades del Kernel
+    "--cap-drop=ALL"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

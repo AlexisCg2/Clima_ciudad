@@ -1,0 +1,54 @@
+# ==========================================
+# GOBERNANZA Y SECRETOS (ESTRICTO)
+# ==========================================
+# Variables de entorno locales (NUNCA en Git)
+.env*
+!.env.example
+*.env
+
+# Claves de cuentas de servicio y credenciales Firebase
+# NOTA: NO se ignora *.json de forma genérica para preservar package.json, tsconfig.json, etc.
+*firebase*.json
+*serviceAccount*.json
+*service-account*.json
+*credentials*.json
+serviceAccountKey.json
+*.pem
+*.key
+*.cert
+
+# Archivos de canarios de prueba de contención
+*canario*
+*canary*
+
+# ==========================================
+# DEPENDENCIAS Y CONSTRUCCIÓN
+# ==========================================
+node_modules/
+.pnp
+.pnp.js
+.next/
+out/
+build/
+dist/
+
+# ==========================================
+# TESTING Y COBERTURA
+# ==========================================
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# ==========================================
+# LOGS Y SISTEMA
+# ==========================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+.vercel

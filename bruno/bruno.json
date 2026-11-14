@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "09-clima-por-ciudad",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

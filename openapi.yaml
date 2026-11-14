@@ -1,0 +1,611 @@
+openapi: 3.1.0
+info:
+  title: 09 · Clima por ciudad API
+  version: 1.0.0
+  description: >-
+    API REST para consulta de pronósticos meteorológicos mediante Open-Meteo,
+    gestión de caché compartida de 15 minutos en Firestore y administración de
+    ciudades favoritas protegidas por Firebase Authentication y cookies de sesión HttpOnly.
+servers:
+  - url: /api
+    description: Servidor Next.js (App Router)
+
+paths:
+  /auth/sesion:
+    post:
+      summary: Iniciar sesión e intercambiar ID Token por Cookie de Sesión HttpOnly
+      operationId: iniciarSesion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntradaSesion'
+      responses:
+        '204':
+          description: Sesión iniciada con éxito. Emite cabecera Set-Cookie HttpOnly.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: sesion=...; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=432000
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+        '401':
+          $ref: '#/components/responses/ErrorNoAutenticado'
+        '502':
+          $ref: '#/components/responses/ErrorServicioExterno'
+
+    delete:
+      summary: Cerrar sesión activa y destruir Cookie HttpOnly
+      operationId: cerrarSesion
+      responses:
+        '204':
+          description: Sesión cerrada con éxito. Limpia la cabecera Set-Cookie.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: sesion=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0
+
+  /auth/yo:
+    get:
+      summary: Consultar la identidad y rol del usuario autenticado
+      operationId: obtenerUsuarioActual
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Datos del usuario autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - usuario
+                properties:
+                  usuario:
+                    $ref: '#/components/schemas/UsuarioSesion'
+        '401':
+          $ref: '#/components/responses/ErrorNoAutenticado'
+
+  /clima:
+    get:
+      summary: Consultar pronóstico meteorológico con caché de 15 minutos
+      operationId: obtenerClima
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitud geográfica (-90 a 90)
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+            example: 4.6097
+        - name: lng
+          in: query
+          required: true
+          description: Longitud geográfica (-180 a 180)
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+            example: -74.0817
+      responses:
+        '200':
+          description: Datos meteorológicos actuales, pronóstico por horas (24h) y por días (7d)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, s-maxage=900, stale-while-revalidate=60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatosClima'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+        '502':
+          $ref: '#/components/responses/ErrorServicioExterno'
+        '504':
+          $ref: '#/components/responses/ErrorTimeoutServicio'
+
+  /ciudades/buscar:
+    get:
+      summary: Buscar ciudades por nombre en el servicio geográfico
+      operationId: buscarCiudades
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Término de búsqueda (entre 2 y 60 caracteres)
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 60
+            example: Bogota
+        - name: limite
+          in: query
+          required: false
+          description: Cantidad máxima de resultados a retornar (1 a 20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+      responses:
+        '200':
+          description: Lista de ciudades coincidentes
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ciudades
+                properties:
+                  ciudades:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CiudadSugerida'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+        '502':
+          $ref: '#/components/responses/ErrorServicioExterno'
+
+  /ciudades:
+    get:
+      summary: Listar las ciudades favoritas del usuario autenticado
+      operationId: listarCiudadesFavoritas
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de ciudades favoritas guardadas
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ciudades
+                properties:
+                  ciudades:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CiudadFavorita'
+        '401':
+          $ref: '#/components/responses/ErrorNoAutenticado'
+
+    post:
+      summary: Guardar una nueva ciudad favorita (máximo 10 por usuario)
+      operationId: agregarCiudadFavorita
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntradaCrearCiudadFavorita'
+      responses:
+        '201':
+          description: Ciudad favorita agregada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CiudadFavorita'
+        '400':
+          $ref: '#/components/responses/ErrorValidacion'
+        '401':
+          $ref: '#/components/responses/ErrorNoAutenticado'
+        '409':
+          $ref: '#/components/responses/ErrorConflicto'
+
+  /ciudades/{id}:
+    delete:
+      summary: Eliminar una ciudad favorita por identificador
+      operationId: eliminarCiudadFavorita
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador del documento de la ciudad en Firestore
+          schema:
+            type: string
+            example: fav_1700000000_abcde
+      responses:
+        '204':
+          description: Ciudad favorita eliminada correctamente
+        '401':
+          $ref: '#/components/responses/ErrorNoAutenticado'
+        '404':
+          $ref: '#/components/responses/ErrorRecursoNoEncontrado'
+
+components:
+  securitySchemes:
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: sesion
+      description: Cookie de sesión HttpOnly gestionada por Firebase Auth Admin
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token ID de Firebase para pruebas de API (Bruno / Postman)
+
+  responses:
+    ErrorValidacion:
+      description: Parámetros o cuerpo de petición inválidos (HTTP 400)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+    ErrorNoAutenticado:
+      description: Sin sesión activa o token inválido/expirado (HTTP 401)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+    ErrorNoAutorizado:
+      description: Sin permisos suficientes para acceder al recurso (HTTP 403)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+    ErrorRecursoNoEncontrado:
+      description: El recurso solicitado no existe (HTTP 404)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+    ErrorConflicto:
+      description: Límite de 10 favoritas alcanzado o ciudad duplicada (HTTP 409)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+    ErrorServicioExterno:
+      description: Error de comunicación con Open-Meteo o Firebase (HTTP 502)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+    ErrorTimeoutServicio:
+      description: Tiempo de espera agotado al consultar servicio externo (HTTP 504)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespuestaError'
+
+  schemas:
+    DetalleErrorValidacion:
+      type: object
+      required:
+        - campo
+        - mensaje
+      properties:
+        campo:
+          type: string
+          example: lat
+        mensaje:
+          type: string
+          example: Debe estar entre -90 y 90
+
+    RespuestaError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: Los datos proporcionados son inválidos
+        detalles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetalleErrorValidacion'
+
+    EntradaSesion:
+      type: object
+      additionalProperties: false
+      required:
+        - idToken
+      properties:
+        idToken:
+          type: string
+          example: eyJhbGciOiJSUzI1NiIs...
+
+    UsuarioSesion:
+      type: object
+      required:
+        - uid
+        - correo
+        - rol
+      properties:
+        uid:
+          type: string
+          example: u7X9kLmP4qWs
+        correo:
+          type: string
+          example: usuario@example.com
+        rol:
+          type: string
+          enum: [usuario, admin]
+          example: usuario
+
+    Coordenadas:
+      type: object
+      required:
+        - lat
+        - lng
+      properties:
+        lat:
+          type: number
+          example: 4.6097
+        lng:
+          type: number
+          example: -74.0817
+
+    PronosticoHora:
+      type: object
+      required:
+        - hora
+        - temperaturaCelsius
+        - temperaturaFahrenheit
+        - sensacionTermicaCelsius
+        - sensacionTermicaFahrenheit
+        - codigoWmo
+        - descripcion
+        - probabilidadPrecipitacion
+        - humedadRelativa
+        - velocidadVientoKmH
+      properties:
+        hora:
+          type: string
+          example: '2026-11-14T12:00'
+        temperaturaCelsius:
+          type: number
+          example: 19.5
+        temperaturaFahrenheit:
+          type: number
+          example: 67.1
+        sensacionTermicaCelsius:
+          type: number
+          example: 19.0
+        sensacionTermicaFahrenheit:
+          type: number
+          example: 66.2
+        codigoWmo:
+          type: integer
+          example: 2
+        descripcion:
+          type: string
+          example: Parcialmente nublado
+        probabilidadPrecipitacion:
+          type: integer
+          example: 10
+        humedadRelativa:
+          type: integer
+          example: 65
+        velocidadVientoKmH:
+          type: number
+          example: 12.0
+
+    PronosticoDia:
+      type: object
+      required:
+        - fecha
+        - temperaturaMinCelsius
+        - temperaturaMaxCelsius
+        - temperaturaMinFahrenheit
+        - temperaturaMaxFahrenheit
+        - codigoWmo
+        - descripcion
+        - probabilidadPrecipitacionMax
+        - amanecer
+        - atardecer
+      properties:
+        fecha:
+          type: string
+          example: '2026-11-14'
+        temperaturaMinCelsius:
+          type: number
+          example: 11.5
+        temperaturaMaxCelsius:
+          type: number
+          example: 21.0
+        temperaturaMinFahrenheit:
+          type: number
+          example: 52.7
+        temperaturaMaxFahrenheit:
+          type: number
+          example: 69.8
+        codigoWmo:
+          type: integer
+          example: 2
+        descripcion:
+          type: string
+          example: Parcialmente nublado
+        probabilidadPrecipitacionMax:
+          type: integer
+          example: 20
+        amanecer:
+          type: string
+          example: '2026-11-14T05:45'
+        atardecer:
+          type: string
+          example: '2026-11-14T17:45'
+
+    DatosClima:
+      type: object
+      required:
+        - coordenadas
+        - zonaHoraria
+        - temperaturaActualCelsius
+        - temperaturaActualFahrenheit
+        - sensacionTermicaCelsius
+        - sensacionTermicaFahrenheit
+        - humedadRelativa
+        - velocidadVientoKmH
+        - codigoWmo
+        - descripcion
+        - icono
+        - pronostico24Horas
+        - pronostico7Dias
+        - obtenidoEn
+        - desdeCache
+        - antiguedadMinutos
+      properties:
+        coordenadas:
+          $ref: '#/components/schemas/Coordenadas'
+        zonaHoraria:
+          type: string
+          example: America/Bogota
+        temperaturaActualCelsius:
+          type: number
+          example: 19.5
+        temperaturaActualFahrenheit:
+          type: number
+          example: 67.1
+        sensacionTermicaCelsius:
+          type: number
+          example: 19.0
+        sensacionTermicaFahrenheit:
+          type: number
+          example: 66.2
+        humedadRelativa:
+          type: integer
+          example: 65
+        velocidadVientoKmH:
+          type: number
+          example: 12.0
+        codigoWmo:
+          type: integer
+          example: 2
+        descripcion:
+          type: string
+          example: Parcialmente nublado
+        icono:
+          type: string
+          example: sol-nube
+        pronostico24Horas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PronosticoHora'
+        pronostico7Dias:
+          type: array
+          items:
+            $ref: '#/components/schemas/PronosticoDia'
+        obtenidoEn:
+          type: string
+          format: date-time
+          example: '2026-11-14T12:00:00.000Z'
+        desdeCache:
+          type: boolean
+          example: true
+        antiguedadMinutos:
+          type: integer
+          example: 7
+
+    CiudadSugerida:
+      type: object
+      required:
+        - id
+        - nombre
+        - pais
+        - codigoPais
+        - lat
+        - lng
+        - zonaHoraria
+      properties:
+        id:
+          type: integer
+          example: 3688689
+        nombre:
+          type: string
+          example: Bogotá
+        pais:
+          type: string
+          example: Colombia
+        codigoPais:
+          type: string
+          example: CO
+        region:
+          type: string
+          nullable: true
+          example: Bogota D.C.
+        lat:
+          type: number
+          example: 4.60971
+        lng:
+          type: number
+          example: -74.08175
+        zonaHoraria:
+          type: string
+          example: America/Bogota
+
+    CiudadFavorita:
+      type: object
+      required:
+        - id
+        - nombre
+        - pais
+        - lat
+        - lng
+        - agregadaEn
+      properties:
+        id:
+          type: string
+          example: fav_1700000000_abcde
+        nombre:
+          type: string
+          example: Medellín
+        pais:
+          type: string
+          example: Colombia
+        lat:
+          type: number
+          example: 6.2442
+        lng:
+          type: number
+          example: -75.5812
+        agregadaEn:
+          type: string
+          format: date-time
+          example: '2026-11-14T12:00:00.000Z'
+
+    EntradaCrearCiudadFavorita:
+      type: object
+      additionalProperties: false
+      required:
+        - nombre
+        - pais
+        - lat
+        - lng
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Medellín
+        pais:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Colombia
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          example: 6.2442
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+          example: -75.5812
