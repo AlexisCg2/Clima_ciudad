@@ -35,10 +35,12 @@ export function verificarVariablesEntornoFirebaseAdmin(): {
   projectId: string;
   clientEmail: string;
   privateKey: string;
+  esEmulador: boolean;
 } {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const esEmulador = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+  const projectId = process.env.FIREBASE_PROJECT_ID || (esEmulador ? 'demo-clima-ciudad' : undefined);
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || (esEmulador ? 'emulator@example.com' : undefined);
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY || (esEmulador ? 'none' : undefined);
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new ErrorServicioExterno(
@@ -51,7 +53,7 @@ export function verificarVariablesEntornoFirebaseAdmin(): {
     privateKey = privateKey.replace(/\\n/g, '\n');
   }
 
-  return { projectId, clientEmail, privateKey };
+  return { projectId, clientEmail, privateKey, esEmulador };
 }
 
 /**
@@ -90,13 +92,17 @@ export async function obtenerFirestoreAdmin(): Promise<FirestoreAdminLike> {
     const app =
       apps.length > 0 && apps[0]
         ? apps[0]
-        : adminApp.initializeApp({
-            credential: adminApp.cert({
-              projectId: credenciales.projectId,
-              clientEmail: credenciales.clientEmail,
-              privateKey: credenciales.privateKey,
-            }),
-          });
+        : adminApp.initializeApp(
+            credenciales.esEmulador
+              ? { projectId: credenciales.projectId }
+              : {
+                  credential: adminApp.cert({
+                    projectId: credenciales.projectId,
+                    clientEmail: credenciales.clientEmail,
+                    privateKey: credenciales.privateKey,
+                  }),
+                }
+          );
 
     instanciaFirestore = adminFirestore.getFirestore(app) as unknown as FirestoreAdminLike;
     return instanciaFirestore;
@@ -126,13 +132,17 @@ export async function obtenerAuthAdmin(): Promise<AuthAdminLike> {
     const app =
       apps.length > 0 && apps[0]
         ? apps[0]
-        : adminApp.initializeApp({
-            credential: adminApp.cert({
-              projectId: credenciales.projectId,
-              clientEmail: credenciales.clientEmail,
-              privateKey: credenciales.privateKey,
-            }),
-          });
+        : adminApp.initializeApp(
+            credenciales.esEmulador
+              ? { projectId: credenciales.projectId }
+              : {
+                  credential: adminApp.cert({
+                    projectId: credenciales.projectId,
+                    clientEmail: credenciales.clientEmail,
+                    privateKey: credenciales.privateKey,
+                  }),
+                }
+          );
 
     instanciaAuth = adminAuth.getAuth(app) as unknown as AuthAdminLike;
     return instanciaAuth;
